@@ -1,36 +1,11 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
 from database import engine, SessionLocal
+from schemas import UserCreate, LoginRequest, WebsiteCreate, FocusCreate
 import models
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
-
-# ------------------
-# Schemas
-# ------------------
-
-class UserCreate(BaseModel):
-    name: str
-    email: str
-    password: str
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-
-class WebsiteCreate(BaseModel):
-    website: str
-    user_id: int
-
-
-class FocusCreate(BaseModel):
-    status: str
-    user_id: int
 
 
 # ------------------
@@ -55,6 +30,7 @@ def register(user: UserCreate):
     ).first()
 
     if existing_user:
+        db.close()
         raise HTTPException(status_code=409, detail="Email already registered")
 
     new_user = models.User(
@@ -83,14 +59,17 @@ def login(user: LoginRequest):
     ).first()
 
     if not existing_user:
+        db.close()
         raise HTTPException(status_code=401, detail="Invalid Email or Password")
 
     if existing_user.password != user.password:
+        db.close()
         raise HTTPException(status_code=401, detail="Invalid Email or Password")
 
+    user_id = existing_user.id
     db.close()
 
-    return {"message": "Login Successful", "user_id": existing_user.id}
+    return {"message": "Login Successful", "user_id": user_id}
 
 
 # ------------------
@@ -104,6 +83,7 @@ def add_website(data: WebsiteCreate):
     user = db.query(models.User).filter(models.User.id == data.user_id).first()
 
     if not user:
+        db.close()
         raise HTTPException(status_code=404, detail="User not found")
 
     website = models.BlockedWebsite(
@@ -131,6 +111,7 @@ def delete_website(website_id: int):
     ).first()
 
     if not website:
+        db.close()
         raise HTTPException(status_code=404, detail="Website not found")
 
     db.delete(website)
@@ -151,6 +132,7 @@ def start_focus(data: FocusCreate):
     user = db.query(models.User).filter(models.User.id == data.user_id).first()
 
     if not user:
+        db.close()
         raise HTTPException(status_code=404, detail="User not found")
 
     session = models.FocusSession(
@@ -179,6 +161,7 @@ def stop_focus(user_id: int):
     ).first()
 
     if not session:
+        db.close()
         raise HTTPException(status_code=404, detail="No active focus session")
 
     session.status = "STOPPED"
